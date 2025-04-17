@@ -1,6 +1,6 @@
 # Whiz - Real-time Messaging Application
 
-A real-time messaging platform with AI-powered features for conversation summaries and context analysis.
+
 
 ## Project Structure
 
