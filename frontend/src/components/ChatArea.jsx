@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Message from './Message.jsx';
 
 function ChatArea({ 
   room, 
@@ -120,57 +121,15 @@ function ChatArea({
           </div>
         ) : (
           <div className="space-y-2">
-            {messages.map((message, index) => {
-              const isOwnMessage = message.username === user.username;
-              
-              return (
-                <div 
-                  key={index} 
-                  className="group hover:bg-gray-600 hover:bg-opacity-50 p-2 -mx-2 rounded cursor-pointer"
-                  onClick={() => onMessageSelect(message)}
-                >
-                  <div className="flex items-start">
-                    {/* Avatar */}
-                    <div className="w-10 h-10 rounded mr-3 flex-shrink-0">
-                      <div className="w-10 h-10 bg-orange-500 rounded flex items-center justify-center text-white font-medium">
-                        {message.username?.charAt(0).toUpperCase() || 'U'}
-                      </div>
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center mb-1">
-                        <span className="font-semibold text-white mr-2 text-sm">
-                          {message.username || 'Unknown User'}
-                        </span>
-                        <span className="text-xs text-gray-400">
-                          {message.timestamp ? formatTimestamp(message.timestamp) : 'Just now'}
-                        </span>
-                        
-                        {/* Message Actions */}
-                        <div className="ml-auto opacity-0 group-hover:opacity-100 flex items-center">
-                          <button 
-                            className="p-1 text-gray-400 hover:text-white hover:bg-gray-600 rounded text-xs"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onReplyToMessage(message);
-                            }}
-                            title="Reply to message"
-                          >
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 717 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"/>
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="text-gray-200 whitespace-pre-wrap break-words leading-relaxed">
-                        {message.content}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {messages.map((message, index) => (
+              <div 
+                key={message.id || index} 
+                className="group hover:bg-gray-600 hover:bg-opacity-50 p-2 -mx-2 rounded cursor-pointer"
+                onClick={() => onMessageSelect(message)}
+              >
+                <Message message={message} user={user} />
+              </div>
+            ))}
             <div ref={messagesEndRef} />
           </div>
         )}

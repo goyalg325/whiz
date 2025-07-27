@@ -55,6 +55,7 @@ func (h *Hub) Run() {
 							Content:  "user left the chat",
 							RoomID:   cl.RoomID,
 							Username: cl.Username,
+							IsSystem: true,
 						}
 					}
 

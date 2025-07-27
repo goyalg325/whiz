@@ -22,6 +22,7 @@ type Message struct {
 	RoomID    string `json:"roomId"`
 	Username  string `json:"username"`
 	Timestamp string `json:"timestamp,omitempty"`
+	IsSystem  bool   `json:"isSystem,omitempty"`
 }
 
 // IncomingMessage represents the structure of messages sent from the frontend
