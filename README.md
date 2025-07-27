@@ -180,3 +180,23 @@ You can use the following requests to test the API endpoints:
 #### Delete Message
 - Method: DELETE
 - URL: http://localhost:8080/api/messages/1
+
+#### Get Message Context (AI-generated)
+- Method: GET
+- URL: http://localhost:8080/api/messages/1/context
+
+### Summaries
+
+#### Get Channel Summary
+- Method: GET
+- URL: http://localhost:8080/api/summaries/channel/1
+
+#### Get Missed Messages Summary
+- Method: GET
+- URL: http://localhost:8080/api/summaries/missed/1/1
+
+## Development Notes
+
+- The application uses mock AI responses when no Gemini API key is provided
+- Database functionality can be disabled for demo/testing purposes
+- WebSocket server runs on port 8081 by default for real-time message updates
