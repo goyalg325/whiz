@@ -1,27 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { fetchMessageContext } from '../api/client';
 
 function ContextPanel({ message, onClose }) {
-  const [context, setContext] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [context, setContext] = useState("This is a placeholder for the AI context analysis feature. In a real implementation, this would analyze the message content and provide relevant context from previous messages.");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  useEffect(() => {
-    const loadContext = async () => {
-      try {
-        setLoading(true);
-        const data = await fetchMessageContext(message.id);
-        setContext(data.context);
-        setLoading(false);
-      } catch (err) {
-        console.error('Failed to load message context:', err);
-        setError('Failed to generate context. Please try again.');
-        setLoading(false);
-      }
-    };
-
-    loadContext();
-  }, [message.id]);
 
   return (
     <div className="w-80 border-l border-gray-200 bg-gray-50 flex flex-col h-full">
@@ -39,18 +21,18 @@ function ContextPanel({ message, onClose }) {
 
       <div className="p-4 border-b border-gray-200 bg-white shadow-sm">
         <div className="flex items-center mb-2">
-          <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center mr-2">
-            {message.username.charAt(0).toUpperCase()}
+          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center mr-2">
+            {message?.username?.charAt(0).toUpperCase() || 'U'}
           </div>
-          <span className="font-medium">{message.username}</span>
+          <span className="font-medium">{message?.username || 'Unknown User'}</span>
         </div>
-        <p className="text-gray-800 whitespace-pre-wrap">{message.content}</p>
+        <p className="text-gray-800 whitespace-pre-wrap">{message?.content || 'No content'}</p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full">
-            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600"></div>
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
             <p className="mt-3 text-sm text-gray-600">Generating context...</p>
           </div>
         ) : error ? (
@@ -72,4 +54,4 @@ function ContextPanel({ message, onClose }) {
   );
 }
 
-export default ContextPanel; 
+export default ContextPanel;

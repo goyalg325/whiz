@@ -2,6 +2,70 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Custom Component Layer - Higher Specificity */
+@layer components {
+  /* Message input focus styles with higher specificity */
+  .chat-input {
+    color: #b0b1b4 !important; /* Dark gray text */
+    background-color: #353535 !important; /* White background */
+    border: 1px solid #d1d5db !important; /* Gray border */
+  }
+
+  .chat-input::placeholder {
+    color: #0f2449 !important; /* Gray placeholder */
+  }
+
+  .chat-input:focus {
+    outline: none !important;
+    border-color: #3B82F6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+    color: #111827 !important; /* Ensure text stays dark on focus */
+  }
+
+  /* Message bubble styles with higher specificity */
+  .message-sent {
+    background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%) !important;
+    color: white !important;
+    border-radius: 18px 18px 4px 18px !important;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3) !important;
+    border: none !important;
+  }
+
+  .message-received {
+    background: #ffffff !important;
+    color: #1F2937 !important;
+    border: 2px solid #E5E7EB !important;
+    border-radius: 18px 18px 18px 4px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  /* Chat container with proper scrolling */
+  .chat-messages-container {
+    height: calc(100vh - 200px) !important;
+    overflow-y: auto !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: #CBD5E0 #F7FAFC !important;
+  }
+
+  .chat-messages-container::-webkit-scrollbar {
+    width: 8px !important;
+  }
+
+  .chat-messages-container::-webkit-scrollbar-track {
+    background: #F7FAFC !important;
+    border-radius: 4px !important;
+  }
+
+  .chat-messages-container::-webkit-scrollbar-thumb {
+    background: #CBD5E0 !important;
+    border-radius: 4px !important;
+  }
+
+  .chat-messages-container::-webkit-scrollbar-thumb:hover {
+    background: #A0AEC0 !important;
+  }
+}
+
 /* Custom base styles */
 body {
   @apply bg-gray-50 text-gray-900;
@@ -14,4 +78,128 @@ body {
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+/* Custom scrollbar styles */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E0 #F7FAFC;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #F7FAFC;
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #CBD5E0;
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #A0AEC0;
+}
+
+/* Chat container with proper scrolling */
+.chat-messages-container {
+  height: calc(100vh - 200px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E0 #F7FAFC;
+}
+
+.chat-messages-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-messages-container::-webkit-scrollbar-track {
+  background: #F7FAFC;
+  border-radius: 4px;
+}
+
+.chat-messages-container::-webkit-scrollbar-thumb {
+  background: #CBD5E0;
+  border-radius: 4px;
+}
+
+.chat-messages-container::-webkit-scrollbar-thumb:hover {
+  background: #A0AEC0;
+}
+
+/* Message input focus styles */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;/* Ensure all input fields have proper text color */
+input[type="text"], 
+input[type="email"], 
+input[type="password"], 
+textarea {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+}
+
+input[type="text"]:focus, 
+input[type="email"]:focus, 
+input[type="password"]:focus, 
+textarea:focus {
+  color: #111827 !important;
+}
+
+/* Message bubble styles */
+.message-sent {
+  background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
+  color: white;
+  border-radius: 18px 18px 4px 18px;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  border: none;
+}
+
+.message-received {
+  background: #ffffff;
+  color: #1F2937;
+  border: 2px solid #E5E7EB;
+  border-radius: 18px 18px 18px 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Message animation */
+.message-enter {
+  animation: messageSlideIn 0.3s ease-out;
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Emergency utility layer - Highest Priority */
+@layer utilities {
+  .force-dark-text {
+    color: #111827 !important;
+  }
+  
+  .force-white-bg {
+    background-color: #ffffff !important;
+  }
+  
+  .force-blue-gradient {
+    background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%) !important;
+    color: white !important;
+  }
+  
+  .force-white-bubble {
+    background: #ffffff !important;
+    color: #1F2937 !important;
+    border: 2px solid #E5E7EB !important;
+  }
 }

@@ -1,8 +1,30 @@
 class SocketClient {
-  constructor(url) {
-    this.url = url;
+  constructor(roomId, username) {
+    console.log("SocketClient constructor called with:", {
+      roomId: roomId,
+      roomIdType: typeof roomId,
+      username: username
+    });
+    
+    this.roomId = roomId;
+    this.username = username;
+    
+    // Make sure roomId is defined and not empty
+    if (roomId && roomId !== 'undefined' && roomId !== 'null') {
+      // Include required query parameters for the WebSocket connection
+      const userId = username || 'anonymous'; // Fallback if username is not provided
+      
+      // The backend expects the URL format: /ws/joinRoom/:roomId with userId and username as query parameters
+      this.url = `ws://localhost:8080/ws/joinRoom/${roomId}?userId=${encodeURIComponent(userId)}&username=${encodeURIComponent(username)}`;
+      
+      console.log("WebSocket URL configured:", this.url);
+    } else {
+      console.error("Invalid roomId provided to SocketClient:", roomId);
+      this.url = null;
+    }
+    
     this.socket = null;
-    this.messageHandlers = new Map();
+    this.messageHandlers = [];
     this.connectionHandlers = {
       onConnect: [],
       onDisconnect: [],
@@ -11,39 +33,56 @@ class SocketClient {
 
   connect() {
     try {
-      // Create a TCP socket connection to our server
+      // Check if we have a valid URL
+      if (!this.url) {
+        console.error("Cannot connect: WebSocket URL is not valid");
+        return;
+      }
+      
+      console.log("Connecting to WebSocket at:", this.url);
+      console.log("Room ID:", this.roomId, "Type:", typeof this.roomId);
+      
+      // Create a WebSocket connection to our server
       this.socket = new WebSocket(this.url);
 
       this.socket.onopen = () => {
-        console.log('WebSocket connection established');
+        console.log("WebSocket connection established to " + this.url);
         this.connectionHandlers.onConnect.forEach(handler => handler());
       };
 
-      this.socket.onclose = () => {
-        console.log('WebSocket connection closed');
+      this.socket.onclose = (event) => {
+        console.log("WebSocket connection closed with code:", event.code, "reason:", event.reason);
         this.connectionHandlers.onDisconnect.forEach(handler => handler());
         // Attempt to reconnect after 3 seconds
         setTimeout(() => this.connect(), 3000);
       };
 
       this.socket.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error("WebSocket error:", error);
       };
 
       this.socket.onmessage = (event) => {
         try {
+          // Parse the received message
           const message = JSON.parse(event.data);
-          const type = message.type;
+          console.log("WebSocket message received:", message);
           
-          if (this.messageHandlers.has(type)) {
-            this.messageHandlers.get(type).forEach(handler => handler(message));
+          // Ensure the message has a timestamp
+          if (!message.timestamp) {
+            message.timestamp = new Date().toISOString();
           }
+          
+          // Important: process the message regardless of who sent it
+          // This ensures we display messages from all users in the room
+          
+          // Notify all handlers about the new message
+          this.messageHandlers.forEach(handler => handler(message));
         } catch (error) {
-          console.error('Error parsing message:', error);
+          console.error("Error parsing message:", error);
         }
       };
     } catch (error) {
-      console.error('Error connecting to WebSocket:', error);
+      console.error("Error connecting to WebSocket:", error);
       // Attempt to reconnect after 3 seconds
       setTimeout(() => this.connect(), 3000);
     }
@@ -52,44 +91,52 @@ class SocketClient {
   disconnect() {
     if (this.socket) {
       this.socket.close();
+      this.socket = null;
     }
   }
 
-  on(type, handler) {
-    if (!this.messageHandlers.has(type)) {
-      this.messageHandlers.set(type, []);
+  on(handler) {
+    if (typeof handler === "function") {
+      this.messageHandlers.push(handler);
     }
-    this.messageHandlers.get(type).push(handler);
+    return this;
   }
 
-  off(type, handler) {
-    if (this.messageHandlers.has(type)) {
-      const handlers = this.messageHandlers.get(type);
-      const index = handlers.indexOf(handler);
-      if (index !== -1) {
-        handlers.splice(index, 1);
-      }
-    }
+  off(handler) {
+    this.messageHandlers = this.messageHandlers.filter(h => h !== handler);
+    return this;
   }
 
   onConnect(handler) {
     this.connectionHandlers.onConnect.push(handler);
+    return this;
   }
 
   onDisconnect(handler) {
     this.connectionHandlers.onDisconnect.push(handler);
+    return this;
   }
 
   send(message) {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify(message));
-    } else {
-      console.error('Cannot send message, socket not connected');
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      console.error("Cannot send message, socket is not open");
+      return;
     }
+
+    // Prepare the full message with all required fields
+    const fullMessage = {
+      ...message,
+      username: this.username,
+      roomId: this.roomId,
+      timestamp: message.timestamp || new Date().toISOString()
+    };
+
+    console.log("Sending message through WebSocket:", fullMessage);
+
+    // Send the message through WebSocket - this will broadcast to all users
+    // The backend will then broadcast this to all connected clients
+    this.socket.send(JSON.stringify(fullMessage));
   }
 }
 
-// Create a singleton instance
-const socketClient = new SocketClient('ws://localhost:8081');
-
-export default socketClient; 
+export default SocketClient;

@@ -1,8 +1,13 @@
-const API_BASE_URL = 'http://localhost:8080/api';
+const API_BASE_URL = 'http://localhost:8080';
 
 // Generic fetch function with error handling
 async function fetchAPI(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
+  
+  // Debug request body if it exists
+  if (options.body) {
+    console.log(`API Request to ${endpoint}:`, options.body);
+  }
   
   const response = await fetch(url, {
     ...options,
@@ -10,6 +15,7 @@ async function fetchAPI(endpoint, options = {}) {
       'Content-Type': 'application/json',
       ...options.headers,
     },
+    credentials: 'include' // Important for cookies/sessions
   });
 
   if (!response.ok) {
@@ -20,19 +26,46 @@ async function fetchAPI(endpoint, options = {}) {
   return response.json();
 }
 
-// Channel API endpoints
-export async function fetchChannels() {
-  return fetchAPI('/channels');
-}
-
-export async function fetchChannelById(channelId) {
-  return fetchAPI(`/channels/${channelId}`);
-}
-
-export async function createChannel(channelData) {
-  return fetchAPI('/channels', {
+// Auth endpoints
+export async function signup(userData) {
+  return fetchAPI('/signup', {
     method: 'POST',
-    body: JSON.stringify(channelData),
+    body: JSON.stringify(userData),
+  });
+}
+
+export async function login(credentials) {
+  return fetchAPI('/login', {
+    method: 'POST',
+    body: JSON.stringify(credentials),
+  });
+}
+
+export async function logout() {
+  return fetchAPI('/logout', {
+    method: 'GET',
+  });
+}
+
+// Room API endpoints (renamed from channels)
+export async function fetchRooms() {
+  const rooms = await fetchAPI('/ws/getRooms');
+  console.log("Fetched rooms:", rooms);
+  
+  // Log each room with its properties to debug
+  if (Array.isArray(rooms)) {
+    rooms.forEach(room => {
+      console.log(`Room: id=${room.id}, name=${room.name}`);
+    });
+  }
+  
+  return rooms;
+}
+
+export async function createRoom(roomData) {
+  return fetchAPI('/ws/createRoom', {
+    method: 'POST',
+    body: JSON.stringify(roomData),
   });
 }
 
@@ -52,6 +85,13 @@ export async function deleteChannel(channelId) {
 // Message API endpoints
 export async function fetchMessages(channelId) {
   return fetchAPI(`/messages?channel_id=${channelId}`);
+}
+
+// Fetch messages for a specific room from WebSocket API
+export async function fetchRoomMessages(roomId) {
+  const messages = await fetchAPI(`/ws/getMessages/${roomId}`);
+  console.log(`Fetched ${messages ? messages.length : 0} messages for room ${roomId}`);
+  return messages || [];
 }
 
 export async function fetchMessageById(messageId) {
@@ -93,7 +133,7 @@ export async function fetchMissedMessagesSummary(userId, channelId) {
 
 // WebSocket connection for real-time updates
 export function connectWebSocket(onMessage) {
-  const ws = new WebSocket('ws://localhost:8081');
+  const ws = new WebSocket('ws://localhost:8080/ws');
   
   ws.onopen = () => {
     console.log('WebSocket connection established');

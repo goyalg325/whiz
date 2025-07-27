@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import apiClient from '../api/client';
-import socketClient from '../utils/socket';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import * as apiClient from '../api/client';
+import socketClient, { createSocketClient } from '../utils/socket';
 
 // Create context
 const AppContext = createContext();
@@ -11,43 +11,126 @@ export const AppProvider = ({ children }) => {
   const [currentChannel, setCurrentChannel] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [user, setUser] = useState({ id: 1, username: 'user1' }); // Mock user
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  // Initialize socket connection
+  
+  // Get user ID from URL parameter for simulation
+  const getUserInfo = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const userIdParam = urlParams.get('user_id');
+    const userId = userIdParam ? parseInt(userIdParam, 10) : 1;
+    const username = `user${userId}`;
+    console.log("Getting user info from URL:", { id: userId, username });
+    return { id: userId, username: username };
+  };
+  
+  const [user, setUser] = useState(getUserInfo());
+  
+  // Update user info when component mounts or URL changes
   useEffect(() => {
-    socketClient.onConnect(() => setIsConnected(true));
-    socketClient.onDisconnect(() => setIsConnected(false));
-
-    socketClient.connect();
-
+    const updateUserInfo = () => {
+      const newUserInfo = getUserInfo();
+      console.log("Updating user info to:", newUserInfo);
+      setUser(newUserInfo);
+    };
+    
+    // Update on mount
+    updateUserInfo();
+    
+    // Listen for URL changes
+    window.addEventListener('popstate', updateUserInfo);
+    
     return () => {
-      socketClient.disconnect();
+      window.removeEventListener('popstate', updateUserInfo);
     };
   }, []);
+  
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // Create a ref to store our socket client
+  const socketClientRef = useRef(null);
+
+  // Initialize socket connection with the correct user ID
+  useEffect(() => {
+    console.log("Creating socket with user ID:", user.id);
+    
+    // Create a new socket client with the current user ID
+    socketClientRef.current = createSocketClient(user.id);
+    
+    // Set up connection handlers
+    socketClientRef.current.onConnect(() => {
+      console.log(`WebSocket connected for user ${user.id}`);
+      setIsConnected(true);
+    });
+    
+    socketClientRef.current.onDisconnect(() => {
+      console.log(`WebSocket disconnected for user ${user.id}`);
+      setIsConnected(false);
+    });
+
+    // Connect the socket
+    socketClientRef.current.connect();
+
+    return () => {
+      if (socketClientRef.current) {
+        socketClientRef.current.disconnect();
+      }
+    };
+  }, [user.id]);
 
   // Handle new message from socket
   useEffect(() => {
+    if (!socketClientRef.current) return;
+    
     const handleNewMessage = (message) => {
-      if (currentChannel && message.channel_id === currentChannel.id) {
-        setMessages(prev => [...prev, message.content]);
+      console.log("Received new message:", message);
+      
+      if (currentChannel && message.roomId === currentChannel.name) {
+        console.log("Message is for current channel");
+        
+        // Create a consistent message object
+        const newMessage = {
+          id: `${message.username}-${message.timestamp || Date.now()}`, // More unique ID
+          content: message.content,
+          user_id: message.user_id || user.id,
+          username: message.username,
+          roomId: message.roomId,
+          timestamp: message.timestamp || new Date().toISOString(),
+          created_at: message.timestamp || new Date().toISOString()
+        };
+        
+        console.log("Adding message to state:", newMessage);
+        setMessages(prev => {
+          // Check if the message already exists based on content, username, and timestamp
+          const exists = prev.some(msg => 
+            msg.content === newMessage.content && 
+            msg.username === newMessage.username && 
+            Math.abs(new Date(msg.timestamp || msg.created_at).getTime() - new Date(newMessage.timestamp).getTime()) < 1000
+          );
+          if (exists) {
+            console.log("Message already exists, skipping");
+            return prev;
+          }
+          return [...prev, newMessage];
+        });
       }
     };
 
-    socketClient.on('message', handleNewMessage);
+    // Only listen to one event type to avoid duplicates
+    socketClientRef.current.on('message', handleNewMessage);
 
     return () => {
-      socketClient.off('message', handleNewMessage);
+      if (socketClientRef.current) {
+        socketClientRef.current.off('message', handleNewMessage);
+      }
     };
-  }, [currentChannel]);
+  }, [currentChannel, user.id]);
 
   // Load channels
   useEffect(() => {
     const loadChannels = async () => {
       try {
         setIsLoading(true);
-        const data = await apiClient.getChannels();
+        const data = await apiClient.fetchChannels();
         setChannels(data);
         
         // If there are channels but no current channel, set the first one
@@ -74,7 +157,7 @@ export const AppProvider = ({ children }) => {
       
       try {
         setIsLoading(true);
-        const data = await apiClient.getMessages(currentChannel.id);
+        const data = await apiClient.fetchMessages(currentChannel.id);
         setMessages(data);
         setError(null);
       } catch (err) {
@@ -90,31 +173,33 @@ export const AppProvider = ({ children }) => {
 
   // Send a message
   const sendMessage = async (content, parentId = null) => {
-    if (!currentChannel) return;
+    if (!currentChannel || !socketClientRef.current) return;
 
     try {
       setIsLoading(true);
       
-      // Send via API
-      const newMessage = await apiClient.sendMessage(
-        currentChannel.id,
-        content,
-        parentId
-      );
-      
-      // Also send via socket for real-time updates to other users
-      socketClient.send({
-        type: 'message',
-        channel_id: currentChannel.id,
+      // Debug user information before sending
+      console.log("Sending message with user info:", {
         user_id: user.id,
-        content: newMessage
+        username: user.username,
+        content
       });
       
-      // Update local state
-      setMessages(prev => [...prev, newMessage]);
+      // Only send via socket - let the backend handle database save and broadcast
+      const socketMessage = {
+        content: content,  // Send just the content string
+        username: user.username,
+        roomId: currentChannel.name,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log("Socket message:", socketMessage);
+      socketClientRef.current.send(JSON.stringify(socketMessage));
+      
+      // Don't call API or update local state - let WebSocket handle everything
       
       setError(null);
-      return newMessage;
+      return { content, username: user.username, timestamp: new Date().toISOString() };
     } catch (err) {
       setError('Failed to send message');
       console.error(err);
@@ -128,7 +213,7 @@ export const AppProvider = ({ children }) => {
   const getMessageContext = async (messageId) => {
     try {
       setIsLoading(true);
-      const data = await apiClient.getMessageContext(messageId);
+      const data = await apiClient.fetchMessageContext(messageId);
       setError(null);
       return data;
     } catch (err) {
@@ -146,7 +231,7 @@ export const AppProvider = ({ children }) => {
     
     try {
       setIsLoading(true);
-      const data = await apiClient.getChannelSummary(currentChannel.id);
+      const data = await apiClient.fetchChannelSummary(currentChannel.id);
       setError(null);
       return data;
     } catch (err) {
@@ -164,7 +249,7 @@ export const AppProvider = ({ children }) => {
     
     try {
       setIsLoading(true);
-      const data = await apiClient.getMissedMessagesSummary(currentChannel.id);
+      const data = await apiClient.fetchMissedMessagesSummary(user.id, currentChannel.id);
       setError(null);
       return data;
     } catch (err) {

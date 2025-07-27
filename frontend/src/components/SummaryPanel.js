@@ -1,42 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { fetchChannelSummary, fetchMissedMessagesSummary } from '../api/client';
 
-function SummaryPanel({ channel, type, onClose }) {
+function SummaryPanel({ type, roomId, onClose }) {
   const [summary, setSummary] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const loadSummary = async () => {
-      if (!channel) return;
-      
-      try {
-        setLoading(true);
-        let data;
-        
-        if (type === 'channel') {
-          data = await fetchChannelSummary(channel.id);
-        } else {
-          // For demo purposes, we'll use user ID 1
-          const userId = 1;
-          data = await fetchMissedMessagesSummary(userId, channel.id);
-        }
-        
-        setSummary(data.content);
-        setLoading(false);
-      } catch (err) {
-        console.error('Failed to load summary:', err);
-        setError('Failed to generate summary. Please try again.');
-        setLoading(false);
-      }
-    };
-
-    loadSummary();
-  }, [channel, type]);
+    // We'll just mock the summary functionality since the backend may not support it yet
+    setSummary("This is a placeholder for the " + 
+      (type === 'room' ? 'room summary' : 'missed messages summary') +
+      ". In a real implementation, this would fetch data from the backend API.");
+  }, [roomId, type]);
 
   const getTitle = () => {
-    return type === 'channel' 
-      ? `Channel Summary` 
+    return type === 'room' 
+      ? `Room Summary` 
       : `Missed Messages`;
   };
 
@@ -54,16 +32,11 @@ function SummaryPanel({ channel, type, onClose }) {
         </button>
       </div>
 
-      <div className="p-4 border-b border-gray-200 bg-white shadow-sm">
-        <h3 className="font-medium mb-1">#{channel.name}</h3>
-        <p className="text-sm text-gray-500">{channel.description || 'No description'}</p>
-      </div>
-
       <div className="flex-1 overflow-y-auto p-4">
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full">
-            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600"></div>
-            <p className="mt-3 text-sm text-gray-600">Generating {type === 'channel' ? 'summary' : 'missed messages recap'}...</p>
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
+            <p className="mt-3 text-sm text-gray-600">Generating {type === 'room' ? 'summary' : 'missed messages recap'}...</p>
           </div>
         ) : error ? (
           <div className="bg-red-50 text-red-700 p-4 rounded-md text-sm">
@@ -72,7 +45,7 @@ function SummaryPanel({ channel, type, onClose }) {
         ) : (
           <div>
             <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">
-              {type === 'channel' ? 'AI-Generated Summary' : 'What You Missed'}
+              {type === 'room' ? 'AI-Generated Summary' : 'What You Missed'}
             </h3>
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
               <p className="text-gray-800 whitespace-pre-wrap">{summary}</p>
@@ -84,4 +57,4 @@ function SummaryPanel({ channel, type, onClose }) {
   );
 }
 
-export default SummaryPanel; 
+export default SummaryPanel;
