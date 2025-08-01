@@ -103,7 +103,7 @@ func (d *Database) GetRoomMessages(roomId string) ([]map[string]interface{}, err
 	log.Printf("Found channel '%s' with ID %d", roomId, channelId)
 
 	query := `
-		SELECT content, username, created_at
+		SELECT id, content, username, created_at
 		FROM messages 
 		WHERE channel_id = $1
 		ORDER BY created_at ASC
@@ -118,14 +118,16 @@ func (d *Database) GetRoomMessages(roomId string) ([]map[string]interface{}, err
 
 	var messages []map[string]interface{}
 	for rows.Next() {
+		var id int
 		var content, username string
 		var createdAt string
-		if err := rows.Scan(&content, &username, &createdAt); err != nil {
+		if err := rows.Scan(&id, &content, &username, &createdAt); err != nil {
 			log.Printf("Error scanning message row: %v", err)
 			return nil, err
 		}
 
 		message := map[string]interface{}{
+			"id":        id,
 			"content":   content,
 			"username":  username,
 			"roomId":    roomId,
@@ -210,4 +212,167 @@ func (d *Database) CleanupNumericChannels() error {
 	log.Printf("Cleaned up %d numeric channels", rowsAffected)
 
 	return nil
+}
+
+// UpdateUserLastSeen updates the last seen message for a user in a channel
+func (d *Database) UpdateUserLastSeen(username string, channelName string, messageId int) error {
+	log.Printf("Updating last seen for user %s in channel %s to message %d", username, channelName, messageId)
+
+	// First get the channel ID
+	var channelId int
+	err := d.db.QueryRow("SELECT id FROM channels WHERE name = $1", channelName).Scan(&channelId)
+	if err != nil {
+		log.Printf("Error finding channel %s: %v", channelName, err)
+		return err
+	}
+
+	// Create user_channel_activity table if it doesn't exist
+	createTableQuery := `
+		CREATE TABLE IF NOT EXISTS user_channel_activity (
+			id SERIAL PRIMARY KEY,
+			username VARCHAR(50) NOT NULL,
+			channel_id INTEGER NOT NULL REFERENCES channels(id),
+			last_seen_message_id INTEGER,
+			last_activity TIMESTAMP DEFAULT NOW(),
+			UNIQUE(username, channel_id)
+		)
+	`
+
+	_, err = d.db.Exec(createTableQuery)
+	if err != nil {
+		log.Printf("Error creating user_channel_activity table: %v", err)
+		return err
+	}
+
+	// Upsert the user's last seen message
+	query := `
+		INSERT INTO user_channel_activity (username, channel_id, last_seen_message_id, last_activity)
+		VALUES ($1, $2, $3, NOW())
+		ON CONFLICT (username, channel_id)
+		DO UPDATE SET 
+			last_seen_message_id = EXCLUDED.last_seen_message_id,
+			last_activity = NOW()
+	`
+
+	_, err = d.db.Exec(query, username, channelId, messageId)
+	if err != nil {
+		log.Printf("Error updating user last seen: %v", err)
+		return err
+	}
+
+	log.Printf("Successfully updated last seen for user %s in channel %s", username, channelName)
+	return nil
+}
+
+// GetUnreadMessages gets all messages since user's last seen message in a channel
+func (d *Database) GetUnreadMessages(username string, channelName string) ([]map[string]interface{}, error) {
+	log.Printf("Getting unread messages for user %s in channel %s", username, channelName)
+
+	// First get the channel ID
+	var channelId int
+	err := d.db.QueryRow("SELECT id FROM channels WHERE name = $1", channelName).Scan(&channelId)
+	if err == sql.ErrNoRows {
+		log.Printf("Channel '%s' not found", channelName)
+		return []map[string]interface{}{}, nil
+	} else if err != nil {
+		log.Printf("Error looking up channel %s: %v", channelName, err)
+		return nil, err
+	}
+
+	// Get user's last seen message ID
+	var lastSeenMessageId sql.NullInt64
+	err = d.db.QueryRow(`
+		SELECT last_seen_message_id 
+		FROM user_channel_activity 
+		WHERE username = $1 AND channel_id = $2
+	`, username, channelId).Scan(&lastSeenMessageId)
+
+	var query string
+	var args []interface{}
+
+	if err == sql.ErrNoRows || !lastSeenMessageId.Valid {
+		// User hasn't seen any messages in this channel, get all messages
+		log.Printf("User %s has no activity in channel %s, getting all messages", username, channelName)
+		query = `
+			SELECT id, content, username, created_at
+			FROM messages 
+			WHERE channel_id = $1
+			ORDER BY created_at ASC
+		`
+		args = []interface{}{channelId}
+	} else {
+		// Get messages after the last seen message
+		log.Printf("User %s last saw message %d in channel %s", username, lastSeenMessageId.Int64, channelName)
+		query = `
+			SELECT id, content, username, created_at
+			FROM messages 
+			WHERE channel_id = $1 AND id > $2
+			ORDER BY created_at ASC
+		`
+		args = []interface{}{channelId, lastSeenMessageId.Int64}
+	}
+
+	rows, err := d.db.Query(query, args...)
+	if err != nil {
+		log.Printf("Error querying unread messages: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []map[string]interface{}
+	for rows.Next() {
+		var id int
+		var content, messageUsername string
+		var createdAt string
+		if err := rows.Scan(&id, &content, &messageUsername, &createdAt); err != nil {
+			log.Printf("Error scanning message row: %v", err)
+			return nil, err
+		}
+
+		message := map[string]interface{}{
+			"id":        id,
+			"content":   content,
+			"username":  messageUsername,
+			"roomId":    channelName,
+			"timestamp": createdAt,
+		}
+		messages = append(messages, message)
+	}
+
+	log.Printf("Found %d unread messages for user %s in channel %s", len(messages), username, channelName)
+	return messages, nil
+}
+
+// GetAllUnreadMessages gets unread messages from all channels for a user
+func (d *Database) GetAllUnreadMessages(username string) (map[string][]map[string]interface{}, error) {
+	log.Printf("Getting all unread messages for user %s", username)
+
+	// Get all channels
+	channels, err := d.GetAllChannels()
+	if err != nil {
+		return nil, err
+	}
+
+	unreadByChannel := make(map[string][]map[string]interface{})
+
+	for _, channel := range channels {
+		channelName := channel["name"].(string)
+		unreadMessages, err := d.GetUnreadMessages(username, channelName)
+		if err != nil {
+			log.Printf("Error getting unread messages for channel %s: %v", channelName, err)
+			continue
+		}
+
+		if len(unreadMessages) > 0 {
+			unreadByChannel[channelName] = unreadMessages
+		}
+	}
+
+	totalUnread := 0
+	for _, messages := range unreadByChannel {
+		totalUnread += len(messages)
+	}
+
+	log.Printf("Found %d unread messages across %d channels for user %s", totalUnread, len(unreadByChannel), username)
+	return unreadByChannel, nil
 }

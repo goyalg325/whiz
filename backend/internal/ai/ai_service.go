@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -67,10 +68,18 @@ type GeminiResponse struct {
 }
 
 func NewGeminiClient(apiKey string) *GeminiClient {
+	log.Printf("NewGeminiClient called with API key length: %d", len(apiKey))
+	if len(apiKey) > 0 {
+		log.Printf("API key starts with: %s...", apiKey[:min(10, len(apiKey))])
+	}
+
 	useMock := apiKey == "" || apiKey == "mock-api-key"
+	log.Printf("UseMockResponses set to: %v (empty: %v, mock-api-key: %v)", useMock, apiKey == "", apiKey == "mock-api-key")
 
 	if useMock {
 		log.Println("Using mock responses for Gemini AI - for production, set a valid API key")
+	} else {
+		log.Println("Using real Gemini API with provided API key")
 	}
 
 	return &GeminiClient{
@@ -118,10 +127,15 @@ func (g *GeminiClient) GenerateMessageContext(ctx context.Context, req ContextRe
 		return "", errors.New("invalid message information")
 	}
 
+	log.Printf("GenerateMessageContext called - UseMockResponses: %v, APIKey length: %d", g.UseMockResponses, len(g.APIKey))
+
 	// If using mock responses or no API key is set
 	if g.UseMockResponses {
+		log.Printf("Using mock response because UseMockResponses=true")
 		return g.generateMockMessageContext(req)
 	}
+
+	log.Printf("Proceeding with real Gemini API call...")
 
 	// Prepare thread context for Gemini
 	var threadText string
@@ -131,17 +145,34 @@ func (g *GeminiClient) GenerateMessageContext(ctx context.Context, req ContextRe
 	}
 
 	prompt := fmt.Sprintf(
-		"I need context for the following message: \"%s\"\n\nHere's the conversation thread it's part of:\n\n%s\n\nProvide a brief analysis explaining what this message is about, what it's responding to, and its significance in the conversation.",
+		`You are an intelligent chat assistant helping a user understand the context behind a specific message. 
+
+**Target Message:** "%s"
+
+**Conversation Thread:**
+%s
+
+Please provide a well-structured analysis that helps the user understand this message in context. Your response should include:
+
+1. **What this message is about:** Summarize the main point or purpose of this specific message
+2. **Conversation context:** What topic or discussion thread is this part of?
+3. **Response relationship:** If this message is responding to someone, explain what it's responding to
+4. **Significance:** Why is this message important or noteworthy in the conversation?
+5. **Key participants:** Who are the main people involved in this discussion?
+
+Format your response to be clear and scannable, using bullet points or short paragraphs. Focus on helping the user quickly understand both the immediate message and its place in the broader conversation flow.`,
 		req.MessageText,
 		threadText,
 	)
 
+	log.Printf("Making Gemini API call with prompt length: %d", len(prompt))
 	response, err := g.callGeminiAPI(ctx, prompt)
 	if err != nil {
 		log.Printf("Error calling Gemini API: %v, falling back to mock", err)
 		return g.generateMockMessageContext(req)
 	}
 
+	log.Printf("Gemini API call successful, response length: %d", len(response))
 	return response, nil
 }
 
@@ -163,9 +194,24 @@ func (g *GeminiClient) GenerateMissedMessagesSummary(ctx context.Context, req Su
 	}
 
 	prompt := fmt.Sprintf(
-		"Since the user last visited the channel '%s' on %s, there have been %d new messages. Here they are:\n\n%s\n\nPlease provide a concise summary of what the user missed.",
+		`You are an intelligent chat assistant helping a user catch up on missed messages in the "%s" channel. 
+
+Since their last visit on %s, there have been %d new messages. Your task is to provide a meaningful, insightful summary that helps the user quickly understand what happened without overwhelming them.
+
+Messages to analyze:
+%s
+
+Please provide a summary that:
+1. Identifies the main topics, themes, or conversations that took place
+2. Highlights any important decisions, announcements, or action items
+3. Notes who the most active participants were
+4. Mentions any questions asked that might need the user's attention
+5. Captures the overall tone/mood of the conversations (casual chat, serious discussion, problem-solving, etc.)
+6. Organizes information by importance rather than chronological order
+
+Keep the summary concise but informative - focus on what the user actually needs to know to feel caught up, not just what was said. Use a friendly, professional tone.`,
 		req.ChannelName,
-		req.StartTime.Format("Jan 2 15:04"),
+		req.StartTime.Format("Jan 2 at 3:04 PM"),
 		len(req.Messages),
 		messagesText,
 	)
@@ -274,13 +320,71 @@ func (g *GeminiClient) generateMockSummary(req SummaryRequest) (string, error) {
 }
 
 func (g *GeminiClient) generateMockMessageContext(req ContextRequest) (string, error) {
-	return "This message is part of a discussion about [topic]. It was in response to a question about [subject]. " +
-		"The conversation started with [context] and is currently focused on [current focus].", nil
+	// Analyze the message and thread to provide a meaningful mock response
+	messageText := req.MessageText
+	threadCount := len(req.Thread)
+
+	// Try to determine if it's a question, response, or statement
+	isQuestion := strings.Contains(strings.ToLower(messageText), "?") ||
+		strings.HasPrefix(strings.ToLower(messageText), "how ") ||
+		strings.HasPrefix(strings.ToLower(messageText), "what ") ||
+		strings.HasPrefix(strings.ToLower(messageText), "why ") ||
+		strings.HasPrefix(strings.ToLower(messageText), "when ") ||
+		strings.HasPrefix(strings.ToLower(messageText), "where ")
+
+	var analysis string
+	if isQuestion {
+		analysis = "**Message Type:** Question seeking information or clarification\n\n**Context:** This message is asking for input from the team about a specific topic that came up in the recent discussion."
+	} else if strings.Contains(strings.ToLower(messageText), "thanks") || strings.Contains(strings.ToLower(messageText), "got it") {
+		analysis = "**Message Type:** Acknowledgment or appreciation\n\n**Context:** This message is responding to help or information provided earlier in the conversation."
+	} else {
+		analysis = "**Message Type:** Information sharing or discussion contribution\n\n**Context:** This message is contributing new information or perspective to the ongoing discussion."
+	}
+
+	threadInfo := ""
+	if threadCount > 1 {
+		threadInfo = fmt.Sprintf("\n\n**Thread Context:** Part of an active conversation with %d messages. The discussion appears to be focused on collaborative work or problem-solving.", threadCount)
+	} else {
+		threadInfo = "\n\n**Thread Context:** This appears to be the start of a new conversation topic."
+	}
+
+	return fmt.Sprintf("🔍 **Message Analysis**\n\n%s%s\n\n**Significance:** This message helps move the conversation forward by either requesting information, providing updates, or acknowledging team input.\n\n*Note: This is a sample analysis. Enable Gemini AI for detailed contextual understanding.*",
+		analysis, threadInfo), nil
 }
 
 func (g *GeminiClient) generateMockMissedMessagesSummary(req SummaryRequest) (string, error) {
-	return fmt.Sprintf("Since you last visited %s on %s, there have been %d new messages. Here's what you missed: [AI-generated summary of missed content]",
+	// Get some basic info about the messages
+	messageCount := len(req.Messages)
+	if messageCount == 0 {
+		return "No new messages since your last visit.", nil
+	}
+
+	// Get unique participants
+	participants := make(map[string]bool)
+	for _, msg := range req.Messages {
+		participants[msg.Username] = true
+	}
+
+	participantList := make([]string, 0, len(participants))
+	for username := range participants {
+		participantList = append(participantList, username)
+	}
+
+	// Create a more realistic mock summary
+	var summary string
+	if messageCount <= 3 {
+		summary = fmt.Sprintf("**Main Activity:** Brief conversation between %d participants. The discussion covered general topics and casual chat.", len(participantList))
+	} else if messageCount <= 10 {
+		summary = fmt.Sprintf("**Main Topics:** Active discussion with %d participants (%s and others) covering several topics. Key conversations included project updates and general coordination.", len(participantList), participantList[0])
+	} else {
+		summary = fmt.Sprintf("**Busy Period:** High activity with %d messages from %d participants. Main themes included ongoing project discussions, planning sessions, and team coordination. %s was particularly active in driving conversations.", messageCount, len(participantList), participantList[0])
+	}
+
+	return fmt.Sprintf("📊 **Channel Update for #%s**\n\n%s\n\n**Period:** %s to %s\n**Messages:** %d total\n**Participants:** %s\n\n*Note: This is a sample summary. Enable Gemini AI for detailed analysis.*",
 		req.ChannelName,
-		req.StartTime.Format("Jan 2 15:04"),
-		len(req.Messages)), nil
+		summary,
+		req.StartTime.Format("Jan 2 at 3:04 PM"),
+		req.EndTime.Format("3:04 PM"),
+		messageCount,
+		fmt.Sprintf("%v", participantList)), nil
 }

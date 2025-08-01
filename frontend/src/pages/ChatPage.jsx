@@ -4,7 +4,7 @@ import ChatArea from '../components/ChatArea.jsx';
 import ContextPanel from '../components/ContextPanel';
 import SummaryPanel from '../components/SummaryPanel';
 import SocketClient from '../utils/socket';
-import { fetchRoomMessages } from '../api/client';
+import { fetchRoomMessages, updateUserActivity } from '../api/client';
 
 function ChatPage({ 
   user, 
@@ -18,7 +18,7 @@ function ChatPage({
   const [showContext, setShowContext] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showSummary, setShowSummary] = useState(false);
-  const [summaryType, setSummaryType] = useState('room');
+  const [summaryType, setSummaryType] = useState('missed');
   const [socketClient, setSocketClient] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [replyToMessage, setReplyToMessage] = useState(null);
@@ -95,6 +95,20 @@ function ChatPage({
           console.log(`✅ Loaded ${history.length} messages from API for room "${roomName}"`);
           setMessages(history);
           
+          // Track user activity - mark the latest message as seen
+          if (history.length > 0 && user?.username) {
+            const latestMessage = history[history.length - 1];
+            // Only track if it's a real database message (not optimistic update)
+            if (latestMessage.id && typeof latestMessage.id === 'number') {
+              try {
+                await updateUserActivity(user.username, roomName, latestMessage.id);
+                console.log(`📍 Marked message ${latestMessage.id} as seen for user ${user.username} in ${roomName}`);
+              } catch (error) {
+                console.error('Failed to update user activity:', error);
+              }
+            }
+          }
+          
           // Only save to localStorage if we have messages
           if (history.length > 0) {
             const storageKey = `messages_${roomName}`;
@@ -142,7 +156,7 @@ function ChatPage({
         if (isFromCurrentUser) {
           // Find the optimistic message (has local- ID and same content)
           const optimisticIndex = prevMessages.findIndex(m => 
-            m.id && m.id.startsWith('local-') &&
+            m.id && typeof m.id === 'string' && m.id.startsWith('local-') &&
             m.content === message.content && 
             m.username === message.username
           );
@@ -183,6 +197,16 @@ function ChatPage({
         }
         
         const updatedMessages = [...prevMessages, message];
+        
+        // Track user activity for new messages (mark as seen)
+        if (message.id && typeof message.id === 'number' && user?.username && activeRoom?.name) {
+          // Only track if it's not the current user's own message
+          if (message.username !== user.username) {
+            updateUserActivity(user.username, activeRoom.name, message.id).catch(error => {
+              console.error('Failed to update user activity for new message:', error);
+            });
+          }
+        }
         
         // Save to localStorage for persistence
         try {
@@ -323,6 +347,7 @@ function ChatPage({
           <SummaryPanel
             type={summaryType}
             roomId={activeRoom?.name}
+            username={user?.username}
             onClose={handleCloseSummary}
           />
         </div>

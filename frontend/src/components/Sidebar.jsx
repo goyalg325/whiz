@@ -139,16 +139,6 @@ function Sidebar({
           <div className="space-y-0.5">
             <button 
               className="w-full flex items-center px-2 py-1 text-gray-300 hover:bg-gray-800 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={() => onShowSummary('room')}
-              disabled={!activeRoom}
-            >
-              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-              </svg>
-              Room Summary
-            </button>
-            <button 
-              className="w-full flex items-center px-2 py-1 text-gray-300 hover:bg-gray-800 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => onShowSummary('missed')}
               disabled={!activeRoom}
             >

@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 
-const Message = ({ message, user }) => {
-  const [context, setContext] = useState(null);
+const Message = ({ message, user, onSelectForContext }) => {
   const [loading, setLoading] = useState(false);
-  const [showContext, setShowContext] = useState(false);
 
   // Check if this is a system message - check both isSystem field and content patterns
   const isSystemMessage = message.isSystem || 
@@ -26,9 +24,19 @@ const Message = ({ message, user }) => {
   const isOwnMessage = !isSystemMessage && message.username === user.username;
   
   const handleGetContext = async () => {
-    // AI Context functionality disabled for now
-    // This would need to be passed as a prop if needed
-    console.log('AI Context not available in this context');
+    // Check if message has a real database ID (not a local optimistic update)
+    const hasRealId = message.id && typeof message.id === 'number';
+    const isLocalId = message.id && typeof message.id === 'string' && message.id.startsWith('local-');
+    
+    if (!hasRealId) {
+      console.log('Message not yet saved to database, AI context not available');
+      return;
+    }
+    
+    // Call the callback to show context in sidebar
+    if (onSelectForContext) {
+      onSelectForContext(message);
+    }
   };
 
   // Render system messages differently
@@ -79,31 +87,32 @@ const Message = ({ message, user }) => {
           </span>
           
           {/* Only show AI button for regular messages, not system messages */}
-          {!isSystemMessage && (
-            <button 
-              onClick={handleGetContext}
-              className={`ml-2 text-xs px-2 py-1 rounded-full transition-all duration-200 font-medium ${
-                isOwnMessage 
-                  ? 'bg-blue-600 hover:bg-blue-800 text-white shadow-sm' 
-                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700 shadow-sm hover:shadow-md'
-              }`}
-              disabled={loading}
-            >
-              {loading ? (
-                <div className="animate-spin w-3 h-3 border border-current border-t-transparent rounded-full"></div>
-              ) : (
-                context && showContext ? 'Hide AI' : 'AI'
-              )}
-            </button>
-          )}
+          {!isSystemMessage && (() => {
+            const hasRealId = message.id && typeof message.id === 'number';
+            const isLocalId = message.id && typeof message.id === 'string' && message.id.startsWith('local-');
+            
+            return (
+              <button 
+                onClick={handleGetContext}
+                className={`ml-2 text-xs px-2 py-1 rounded-full transition-all duration-200 font-medium ${
+                  isOwnMessage 
+                    ? 'bg-blue-600 hover:bg-blue-800 text-white shadow-sm' 
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700 shadow-sm hover:shadow-md'
+                } ${!hasRealId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={loading || !hasRealId}
+                title={!hasRealId ? (isLocalId ? 'Message still processing...' : 'AI context not available') : 'Show AI context in sidebar'}
+              >
+                {loading ? (
+                  <div className="animate-spin w-3 h-3 border border-current border-t-transparent rounded-full"></div>
+                ) : !hasRealId ? (
+                  isLocalId ? '⏳' : 'AI'
+                ) : (
+                  'AI'
+                )}
+              </button>
+            );
+          })()}
         </div>
-        
-        {context && showContext && (
-          <div className="mt-3 p-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 text-xs animate-in fade-in-0 duration-200">
-            <div className="font-semibold mb-1 text-gray-700">AI Context:</div>
-            <p className="leading-relaxed">{context}</p>
-          </div>
-        )}
       </div>
     </div>
   );

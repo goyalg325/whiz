@@ -127,8 +127,15 @@ export async function fetchChannelSummary(channelId) {
   return fetchAPI(`/summaries/channel/${channelId}`);
 }
 
-export async function fetchMissedMessagesSummary(userId, channelId) {
-  return fetchAPI(`/summaries/missed/${userId}/${channelId}`);
+export async function fetchMissedMessagesSummary(username, channelName) {
+  return fetchAPI(`/summaries/missed/${username}/${channelName}`);
+}
+
+// Update user activity (mark messages as read)
+export async function updateUserActivity(username, channelName, messageId) {
+  return fetchAPI(`/activity/${username}/${channelName}/${messageId}`, {
+    method: 'POST',
+  });
 }
 
 // WebSocket connection for real-time updates
