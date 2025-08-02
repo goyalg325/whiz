@@ -93,57 +93,6 @@ func (h *AIHandler) GetMessageContext(c *gin.Context) {
 	})
 }
 
-// GetChannelSummary generates a summary for a channel
-func (h *AIHandler) GetChannelSummary(c *gin.Context) {
-	channelName := c.Param("channelName")
-
-	// Get recent messages from the channel (last 24 hours)
-	endTime := time.Now()
-	startTime := endTime.Add(-24 * time.Hour)
-
-	messages, err := h.getChannelMessagesInTimeRange(channelName, startTime, endTime)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve messages"})
-		return
-	}
-
-	if len(messages) == 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"summary":     "No messages found in the last 24 hours.",
-			"channelName": channelName,
-		})
-		return
-	}
-
-	// Create summary request
-	req := ai.SummaryRequest{
-		Messages:    messages,
-		StartTime:   startTime,
-		EndTime:     endTime,
-		ChannelName: channelName,
-	}
-
-	// Generate AI summary
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	summary, err := h.aiClient.GenerateSummary(ctx, req)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate summary"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"summary":      summary,
-		"channelName":  channelName,
-		"messageCount": len(messages),
-		"timeRange": gin.H{
-			"start": startTime.Format("2006-01-02 15:04:05"),
-			"end":   endTime.Format("2006-01-02 15:04:05"),
-		},
-	})
-}
-
 // GetMissedMessagesSummary generates a summary of missed messages for a user in a specific channel
 func (h *AIHandler) GetMissedMessagesSummary(c *gin.Context) {
 	username := c.Param("username")
@@ -297,44 +246,4 @@ func (h *AIHandler) getMessageWithThread(messageId int) (*ai.Message, []ai.Messa
 	}
 
 	return targetMessage, allMessages, nil
-}
-
-// Helper function to get channel messages in time range
-func (h *AIHandler) getChannelMessagesInTimeRange(channelName string, startTime, endTime time.Time) ([]ai.Message, error) {
-	// Get messages from database
-	rawMessages, err := h.db.GetRoomMessages(channelName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert to AI message format and filter by time
-	var messages []ai.Message
-	for _, rawMsg := range rawMessages {
-		// Parse timestamp
-		timestampStr, ok := rawMsg["timestamp"].(string)
-		if !ok {
-			continue
-		}
-
-		timestamp, err := time.Parse(time.RFC3339, timestampStr)
-		if err != nil {
-			// Try alternative timestamp format
-			timestamp, err = time.Parse("2006-01-02T15:04:05.999999999Z07:00", timestampStr)
-			if err != nil {
-				continue
-			}
-		}
-
-		// Filter by time range
-		if timestamp.After(startTime) && timestamp.Before(endTime) {
-			message := ai.Message{
-				Content:   rawMsg["content"].(string),
-				Username:  rawMsg["username"].(string),
-				Timestamp: timestamp,
-			}
-			messages = append(messages, message)
-		}
-	}
-
-	return messages, nil
 }

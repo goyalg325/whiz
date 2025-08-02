@@ -342,37 +342,3 @@ func (d *Database) GetUnreadMessages(username string, channelName string) ([]map
 	log.Printf("Found %d unread messages for user %s in channel %s", len(messages), username, channelName)
 	return messages, nil
 }
-
-// GetAllUnreadMessages gets unread messages from all channels for a user
-func (d *Database) GetAllUnreadMessages(username string) (map[string][]map[string]interface{}, error) {
-	log.Printf("Getting all unread messages for user %s", username)
-
-	// Get all channels
-	channels, err := d.GetAllChannels()
-	if err != nil {
-		return nil, err
-	}
-
-	unreadByChannel := make(map[string][]map[string]interface{})
-
-	for _, channel := range channels {
-		channelName := channel["name"].(string)
-		unreadMessages, err := d.GetUnreadMessages(username, channelName)
-		if err != nil {
-			log.Printf("Error getting unread messages for channel %s: %v", channelName, err)
-			continue
-		}
-
-		if len(unreadMessages) > 0 {
-			unreadByChannel[channelName] = unreadMessages
-		}
-	}
-
-	totalUnread := 0
-	for _, messages := range unreadByChannel {
-		totalUnread += len(messages)
-	}
-
-	log.Printf("Found %d unread messages across %d channels for user %s", totalUnread, len(unreadByChannel), username)
-	return unreadByChannel, nil
-}

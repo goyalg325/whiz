@@ -40,7 +40,6 @@ func InitRouter(userHandler *user.Handler, wsHandler *ws.Handler, aiHandler *api
 
 	// AI endpoints
 	r.GET("/messages/:messageId/context", aiHandler.GetMessageContext)
-	r.GET("/summaries/channel/:channelName", aiHandler.GetChannelSummary)
 	r.GET("/summaries/missed/:username/:channelName", aiHandler.GetMissedMessagesSummary)
 	r.POST("/activity/:username/:channelName/:messageId", aiHandler.UpdateUserActivity)
 }
