@@ -13,30 +13,73 @@ function App() {
   const [view, setView] = useState('login'); // 'login', 'signup', 'chat'
 
   useEffect(() => {
-    // Check if user is already logged in (e.g., from localStorage)
+    // Clean up any existing testuser data (one-time cleanup)
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
-        setView('chat');
+        // If it's the old testuser, clear it
+        if (parsedUser.username === 'testuser' && parsedUser.email === 'test@example.com') {
+          console.log('Removing old testuser data');
+          localStorage.removeItem('user');
+          localStorage.removeItem('token');
+          localStorage.removeItem('tokenExpiry');
+          return; // Exit early, don't auto-login
+        }
       } catch (err) {
         console.error('Failed to parse stored user:', err);
         localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        localStorage.removeItem('tokenExpiry');
+        return;
       }
     }
     
-    // For development testing only - auto login with test user if no stored user
-    if (!storedUser) {
-      const testUser = { id: 1, username: 'testuser', email: 'test@example.com' };
-      setUser(testUser);
-      localStorage.setItem('user', JSON.stringify(testUser));
-      setView('chat');
+    // Check if user is already logged in and token hasn't expired
+    const storedToken = localStorage.getItem('token');
+    const tokenExpiry = localStorage.getItem('tokenExpiry');
+    
+    if (storedUser && storedToken && tokenExpiry) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        const expiryTime = new Date(tokenExpiry);
+        const currentTime = new Date();
+        
+        // Check if token is still valid (not expired)
+        if (currentTime < expiryTime) {
+          setUser(parsedUser);
+          setView('chat');
+        } else {
+          // Token expired, clear stored data
+          console.log('Token expired, clearing stored user data');
+          localStorage.removeItem('user');
+          localStorage.removeItem('token');
+          localStorage.removeItem('tokenExpiry');
+        }
+      } catch (err) {
+        console.error('Failed to parse stored user:', err);
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        localStorage.removeItem('tokenExpiry');
+      }
     }
   }, []);
 
   // Extract loadRooms as a separate function so it can be called from callbacks
   const loadRooms = async () => {
+    // Check if token is still valid before making API calls
+    const tokenExpiry = localStorage.getItem('tokenExpiry');
+    if (tokenExpiry) {
+      const expiryTime = new Date(tokenExpiry);
+      const currentTime = new Date();
+      
+      if (currentTime >= expiryTime) {
+        console.log('Token expired during app usage, logging out');
+        handleLogout();
+        return;
+      }
+    }
+    
     try {
       setLoading(true);
       let roomData = [];
@@ -112,14 +155,26 @@ function App() {
   }, [user]);
 
   const handleLogin = (userData) => {
+    // Set token expiration to 1 month from now
+    const expiryDate = new Date();
+    expiryDate.setMonth(expiryDate.getMonth() + 1);
+    
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem('token', userData.token || 'dummy-token'); // Store token from backend
+    localStorage.setItem('tokenExpiry', expiryDate.toISOString());
     setView('chat');
   };
 
   const handleSignup = (userData) => {
+    // Set token expiration to 1 month from now
+    const expiryDate = new Date();
+    expiryDate.setMonth(expiryDate.getMonth() + 1);
+    
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem('token', userData.token || 'dummy-token'); // Store token from backend
+    localStorage.setItem('tokenExpiry', expiryDate.toISOString());
     setView('chat');
   };
 
@@ -130,9 +185,11 @@ function App() {
       console.error('Failed to logout:', err);
     }
     
-    // Even if the server logout fails, we'll clear the local state
+    // Clear all stored authentication data
     setUser(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    localStorage.removeItem('tokenExpiry');
     setView('login');
     setActiveRoom(null);
   };
