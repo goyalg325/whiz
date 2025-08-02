@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import './App.css';
 import { fetchRooms, logout } from './api/client';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
